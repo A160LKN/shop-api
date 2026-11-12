@@ -1,8 +1,9 @@
-"""Таблицы БД. Деньги хранятся в тиынах (целые числа) — без ошибок округления float."""
+"""Таблицы БД. Деньги хранятся в тиынах (целые числа) — без ошибок округления float.
+Для денег — BIGINT: в обычный INTEGER (до 2,1 млрд) не помещается уже 21,5 млн ₸."""
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -45,7 +46,7 @@ class Product(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), index=True)
     category: Mapped[str] = mapped_column(String(50), index=True)
-    price: Mapped[int] = mapped_column(Integer)  # в тиынах
+    price: Mapped[int] = mapped_column(BigInteger)  # в тиынах
     stock: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
 
@@ -60,7 +61,7 @@ class PromoCode(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     percent: Mapped[int] = mapped_column(Integer)
-    min_order_total: Mapped[int] = mapped_column(Integer, default=0)
+    min_order_total: Mapped[int] = mapped_column(BigInteger, default=0)
     max_uses: Mapped[int] = mapped_column(Integer)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -72,9 +73,9 @@ class Order(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus, name="order_status"), default=OrderStatus.created)
-    subtotal: Mapped[int] = mapped_column(Integer)
-    discount: Mapped[int] = mapped_column(Integer, default=0)
-    total: Mapped[int] = mapped_column(Integer)
+    subtotal: Mapped[int] = mapped_column(BigInteger)
+    discount: Mapped[int] = mapped_column(BigInteger, default=0)
+    total: Mapped[int] = mapped_column(BigInteger)
     promo_code: Mapped[str | None] = mapped_column(String(32))
     payment_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -92,6 +93,6 @@ class OrderItem(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     quantity: Mapped[int] = mapped_column(Integer)
-    price: Mapped[int] = mapped_column(Integer)  # цена на момент заказа — не меняется вместе с каталогом
+    price: Mapped[int] = mapped_column(BigInteger)  # цена на момент заказа — не меняется вместе с каталогом
 
     order: Mapped[Order] = relationship(back_populates="items")

@@ -7,6 +7,9 @@ from tests.conftest import auth
 
 pytestmark = pytest.mark.api
 
+# Дата всегда в будущем: тест не «протухнет» через полгода
+FUTURE = (datetime.now(UTC) + timedelta(days=60)).isoformat()
+
 
 def order(client, user, items, promo_code=None):
     body = {"items": [{"product_id": p.id, "quantity": q} for p, q in items]}
@@ -123,7 +126,7 @@ def test_unknown_promo(client, make_user, make_product):
 
 
 def test_admin_creates_promo(client, make_user):
-    body = {"code": "NEWYEAR", "percent": 25, "max_uses": 50, "expires_at": "2027-01-10T00:00:00Z"}
+    body = {"code": "NEWYEAR", "percent": 25, "max_uses": 50, "expires_at": FUTURE}
     admin = auth(make_user(role=Role.admin))
 
     assert client.post("/promo-codes", json=body, headers=admin).status_code == 201
@@ -133,7 +136,7 @@ def test_admin_creates_promo(client, make_user):
 
 @pytest.mark.parametrize(("percent", "code"), [(0, 422), (1, 201), (90, 201), (91, 422)])
 def test_promo_percent_boundaries(client, make_user, percent, code):
-    body = {"code": f"PCT{percent}", "percent": percent, "max_uses": 1, "expires_at": "2027-01-10T00:00:00Z"}
+    body = {"code": f"PCT{percent}", "percent": percent, "max_uses": 1, "expires_at": FUTURE}
     assert client.post("/promo-codes", json=body, headers=auth(make_user(role=Role.admin))).status_code == code
 
 

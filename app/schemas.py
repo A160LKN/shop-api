@@ -1,13 +1,16 @@
 """Схемы запросов и ответов API. Они же — документация в /docs."""
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models import OrderStatus, Role
 
 Email = Annotated[str, Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", examples=["aibol@mail.kz"])]
-Money = Annotated[int, Field(gt=0, le=100_000_000_000, description="Сумма в тиынах: 1 ₸ = 100")]
+Money = Annotated[int, Field(gt=0, le=100_000_000_000, description="Сумма в тиынах: 1 ₸ = 100, не больше 1 млрд ₸")]
+# id в БД — INTEGER: больше 2 147 483 647 не бывает. Без ограничения такой id даёт 500 вместо 404/422
+MAX_ID = 2_147_483_647
+Id = Annotated[int, Field(gt=0, le=MAX_ID)]
 
 
 class Strict(BaseModel):
@@ -49,6 +52,14 @@ class ProductPatch(Strict):
     price: Money | None = None
     stock: int | None = Field(None, ge=0, le=1_000_000)
 
+    @model_validator(mode="after")
+    def no_explicit_nulls(self):
+        # Поле можно не передавать, но нельзя обнулить: {"stock": null} — ошибка запроса, а не 500 от БД
+        nulls = [name for name in self.model_fields_set if getattr(self, name) is None]
+        if nulls:
+            raise ValueError(f"поля не могут быть null: {', '.join(sorted(nulls))}")
+        return self
+
 
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -70,18 +81,30 @@ class PromoIn(Strict):
     code: str = Field(min_length=3, max_length=32, pattern=r"^[A-Z0-9_-]+$")
     percent: int = Field(ge=1, le=90)
     min_order_total: int = Field(0, ge=0)
-    max_uses: int = Field(ge=1)
+    max_uses: int = Field(ge=1, le=1_000_000)
+    expires_at: AwareDatetime = Field(description="С часовым поясом, например 2027-01-10T00:00:00+05:00")
+
+    @field_validator("expires_at")
+    @classmethod
+    def in_future(cls, v: datetime) -> datetime:
+        if v <= datetime.now(UTC):
+            raise ValueError("дата окончания должна быть в будущем")
+        return v
+
+
+class PromoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    percent: int
+    min_order_total: int
+    max_uses: int
+    used_count: int
     expires_at: datetime
 
 
-class PromoOut(PromoIn):
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
-    id: int
-    used_count: int
-
-
 class OrderLineIn(Strict):
-    product_id: int = Field(gt=0)
+    product_id: Id
     quantity: int = Field(ge=1, le=100)
 
 

@@ -29,6 +29,10 @@ _ids = count(1)
 @pytest.fixture(scope="session")
 def database():
     """Чистая схема один раз на весь прогон: удалить всё и применить миграции."""
+    # Предохранитель: тесты стирают базу целиком — рабочую базу по ошибке не тронем
+    if "test" not in (engine.url.database or ""):
+        pytest.exit(f"Тесты запускаются только на базе с «test» в имени, а указана «{engine.url.database}»",
+                    returncode=2)
     with engine.begin() as conn:
         conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     command.upgrade(Config("alembic.ini"), "head")

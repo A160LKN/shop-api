@@ -57,7 +57,8 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bea
         raise AppError(401, "token_expired", "Срок действия токена истёк — войдите заново") from None
     except jwt.PyJWTError:
         raise AppError(401, "invalid_token", "Неверный токен") from None
-    user = db.get(User, int(payload["sub"]))
+    sub = payload.get("sub")
+    user = db.get(User, int(sub)) if isinstance(sub, str) and sub.isdigit() and int(sub) <= 2_147_483_647 else None
     if user is None:
         raise AppError(401, "invalid_token", "Неверный токен")
     return user

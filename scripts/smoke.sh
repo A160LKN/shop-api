@@ -12,7 +12,7 @@ check() {  # check <описание> <ожидаемое> <фактическо
 check "сервис отвечает" "ok" "$(curl -sf "$API/health" | jq -r .status)"
 check "в каталоге есть товары" "true" "$(curl -sf "$API/products" | jq '.total > 0')"
 
-EMAIL="smoke-$(date +%s)@test.kz"
+EMAIL="smoke-$(date +%s)-$RANDOM$RANDOM@test.kz"  # уникальный даже при запусках в одну секунду
 curl -sf "${JSON[@]}" -d "{\"email\":\"$EMAIL\",\"password\":\"smoke-pass-1\"}" "$API/auth/register" > /dev/null
 TOKEN=$(curl -sf "${JSON[@]}" -d "{\"email\":\"$EMAIL\",\"password\":\"smoke-pass-1\"}" "$API/auth/login" | jq -r .access_token)
 AUTH=(-H "Authorization: Bearer $TOKEN")
