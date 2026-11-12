@@ -1,0 +1,36 @@
+[project]
+name = "shop-api"
+version = "1.0.0"
+description = "Бэкенд интернет-магазина на FastAPI и PostgreSQL с пирамидой тестов"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["migrations/versions"]  # миграции генерирует Alembic
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["B008"]  # Depends() в аргументах — штатный приём FastAPI
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S107"]  # assert и тестовые пароли в тестах — норма
+"app/config.py" = ["S105"]            # значения по умолчанию для локального запуска
+"tools/**" = ["S105"]                # тестовые токены карт имитации шлюза
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: чистая логика без БД и сети",
+    "integration: сервисы и запросы к настоящему PostgreSQL",
+    "api: HTTP-запросы к приложению целиком",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/seed.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
