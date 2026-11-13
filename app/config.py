@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     jwt_ttl_minutes: int = 60
     payment_gateway_url: str = "http://localhost:8001"
     payment_timeout_seconds: float = 5.0
+    # Адреса фронтендов, которым браузер разрешит обращаться к API (CORS), через запятую
+    cors_origins: str = "http://localhost:5173,http://localhost:4173"
+    timezone: str = "Asia/Almaty"  # часовой пояс магазина — для «сегодня» в сводке
     admin_email: str = "admin@shop.kz"
     admin_password: str = "admin12345"
 

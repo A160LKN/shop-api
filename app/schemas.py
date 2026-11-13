@@ -1,5 +1,5 @@
 """Схемы запросов и ответов API. Они же — документация в /docs."""
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -70,6 +70,11 @@ class ProductOut(BaseModel):
     stock: int
 
 
+class CategoryOut(BaseModel):
+    name: str
+    count: int
+
+
 class ProductPage(BaseModel):
     items: list[ProductOut]
     total: int
@@ -129,6 +134,7 @@ class OrderIn(Strict):
 class OrderLineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     product_id: int
+    name: str
     quantity: int
     price: int
 
@@ -143,6 +149,49 @@ class OrderOut(BaseModel):
     total: int
     promo_code: str | None
     created_at: datetime
+
+
+class QuoteOut(BaseModel):
+    """Расчёт стоимости заказа до его создания"""
+    subtotal: int
+    discount: int
+    total: int
+    promo_code: str | None
+
+
+class StatusCount(BaseModel):
+    status: OrderStatus
+    count: int
+
+
+class DayRevenue(BaseModel):
+    day: date
+    revenue: int
+    orders: int
+
+
+class TopProduct(BaseModel):
+    product_id: int
+    name: str
+    quantity: int
+    revenue: int
+
+
+class LowStock(BaseModel):
+    id: int
+    name: str
+    stock: int
+
+
+class StatsOut(BaseModel):
+    """Сводка для администратора. Выручка — по оплаченным, отправленным и доставленным заказам."""
+    revenue: int
+    paid_orders: int
+    average_check: int
+    orders_by_status: list[StatusCount]
+    revenue_by_day: list[DayRevenue]
+    top_products: list[TopProduct]
+    low_stock: list[LowStock]
 
 
 class PaymentIn(Strict):

@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Order, Role, User
-from app.schemas import MAX_ID, OrderIn, OrderOut, PaymentIn
+from app.models import Order, OrderStatus, Role, User
+from app.schemas import MAX_ID, OrderIn, OrderOut, PaymentIn, QuoteOut
 from app.security import admin_user, current_user
 from app.services import orders as service
 from app.services.payments import PaymentGateway, get_gateway
@@ -20,12 +20,21 @@ def create_order(data: OrderIn, db: Session = Depends(get_db), user: User = Depe
     return service.create_order(db, user, data)
 
 
+@router.post("/quote", response_model=QuoteOut)
+def quote(data: OrderIn, db: Session = Depends(get_db), _: User = Depends(current_user)):
+    """Сколько будет стоить заказ с этим промокодом. Товар не резервируется, промокод не расходуется."""
+    totals = service.quote_order(db, data)
+    return QuoteOut(subtotal=totals.subtotal, discount=totals.discount, total=totals.total,
+                    promo_code=data.promo_code if totals.discount or data.promo_code else None)
+
+
 @router.get("", response_model=list[OrderOut])
 def list_orders(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0, le=MAX_ID),
+    status: OrderStatus | None = None,
 ):
     """Покупатель видит свои заказы, администратор — все. Новые — первыми.
 
@@ -33,6 +42,8 @@ def list_orders(
     query = select(Order).order_by(Order.id.desc())
     if user.role != Role.admin:
         query = query.where(Order.user_id == user.id)
+    if status is not None:
+        query = query.where(Order.status == status)
     return db.scalars(query.limit(limit).offset(offset)).all()
 
 

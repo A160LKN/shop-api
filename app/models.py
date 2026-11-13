@@ -96,3 +96,9 @@ class OrderItem(Base):
     price: Mapped[int] = mapped_column(BigInteger)  # цена на момент заказа — не меняется вместе с каталогом
 
     order: Mapped[Order] = relationship(back_populates="items")
+    product: Mapped[Product] = relationship(lazy="selectin")
+
+    @property
+    def name(self) -> str:
+        """Название товара — видно в заказе, даже если товар уже снят с продажи."""
+        return self.product.name

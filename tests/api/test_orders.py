@@ -186,3 +186,38 @@ def test_orders_list_is_paginated(client, make_user, make_product):
 @pytest.mark.parametrize(("limit", "code"), [(0, 422), (1, 200), (200, 200), (201, 422)])
 def test_orders_limit_boundaries(client, make_user, limit, code):
     assert client.get("/orders", params={"limit": limit}, headers=auth(make_user())).status_code == code
+
+
+def test_admin_lists_promo_codes(client, make_user, make_promo):
+    make_promo(code="FIRST")
+    make_promo(code="SECOND")
+
+    response = client.get("/promo-codes", headers=auth(make_user(role=Role.admin)))
+
+    assert [p["code"] for p in response.json()] == ["SECOND", "FIRST"]
+    assert client.get("/promo-codes", headers=auth(make_user())).status_code == 403
+
+
+def test_order_items_carry_product_names_even_after_product_is_removed(client, db, make_user, make_product):
+    user = make_user()
+    product = make_product(name="Чайник Xiaomi")
+    order_id = order(client, user, [(product, 1)]).json()["id"]
+
+    product.is_active = False  # товар сняли с продажи
+    db.commit()
+
+    items = client.get(f"/orders/{order_id}", headers=auth(user)).json()["items"]
+    assert items == [{"product_id": product.id, "name": "Чайник Xiaomi", "quantity": 1, "price": product.price}]
+
+
+def test_orders_filtered_by_status(client, make_user, make_product):
+    user = make_user()
+    product = make_product(stock=10)
+    keep = order(client, user, [(product, 1)]).json()["id"]
+    cancelled = order(client, user, [(product, 1)]).json()["id"]
+    client.post(f"/orders/{cancelled}/cancel", headers=auth(user))
+
+    assert [o["id"] for o in client.get("/orders", params={"status": "created"}, headers=auth(user)).json()] == [keep]
+    assert [o["id"] for o in client.get("/orders", params={"status": "cancelled"}, headers=auth(user)).json()] == [
+        cancelled]
+    assert client.get("/orders", params={"status": "lost"}, headers=auth(user)).status_code == 422

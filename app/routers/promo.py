@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,12 @@ from app.schemas import PromoIn, PromoOut
 from app.security import admin_user
 
 router = APIRouter(prefix="/promo-codes", tags=["Промокоды"], dependencies=[Depends(admin_user)])
+
+
+@router.get("", response_model=list[PromoOut])
+def list_promos(db: Session = Depends(get_db)):
+    """Все промокоды, новые — первыми."""
+    return db.scalars(select(PromoCode).order_by(PromoCode.id.desc())).all()
 
 
 @router.post("", response_model=PromoOut, status_code=status.HTTP_201_CREATED)

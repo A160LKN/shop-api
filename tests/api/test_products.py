@@ -134,3 +134,75 @@ def test_delete_is_soft(client, admin, make_product, db):
 def test_patch_and_delete_missing_product(client, admin):
     assert client.patch("/products/999999", json={"price": 100}, headers=auth(admin)).status_code == 404
     assert client.delete("/products/999999", headers=auth(admin)).status_code == 404
+
+
+def test_categories_with_counts(client, make_product):
+    make_product(category="home")
+    make_product(category="home")
+    make_product(category="electronics")
+    make_product(category="hidden", is_active=False)
+
+    assert client.get("/products/categories").json() == [
+        {"name": "electronics", "count": 1},
+        {"name": "home", "count": 2},
+    ]
+
+
+# ---------- Сортировка и фильтры ----------
+
+@pytest.fixture
+def assortment(make_product):
+    make_product(name="Б-средний", price=5_000_00, stock=3)
+    make_product(name="А-дорогой", price=9_000_00, stock=0)
+    make_product(name="В-дешёвый", price=1_000_00, stock=10)
+
+
+def names(client, **params):
+    return [p["name"] for p in client.get("/products", params=params).json()["items"]]
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected"),
+    [
+        ("default", ["Б-средний", "А-дорогой", "В-дешёвый"]),
+        ("newest", ["В-дешёвый", "А-дорогой", "Б-средний"]),
+        ("price_asc", ["В-дешёвый", "Б-средний", "А-дорогой"]),
+        ("price_desc", ["А-дорогой", "Б-средний", "В-дешёвый"]),
+        ("name", ["А-дорогой", "Б-средний", "В-дешёвый"]),
+    ],
+)
+def test_sorting(client, assortment, sort, expected):
+    assert names(client, sort=sort) == expected
+
+
+def test_unknown_sort_is_rejected(client):
+    assert client.get("/products", params={"sort": "random"}).status_code == 422
+
+
+def test_only_in_stock(client, assortment):
+    assert "А-дорогой" not in names(client, in_stock=True)
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"min_price": 5_000_00}, ["Б-средний", "А-дорогой"]),  # граница включается
+        ({"max_price": 5_000_00}, ["Б-средний", "В-дешёвый"]),
+        ({"min_price": 2_000_00, "max_price": 8_000_00}, ["Б-средний"]),
+        ({"min_price": 5_000_00, "max_price": 5_000_00}, ["Б-средний"]),
+    ],
+)
+def test_price_range(client, assortment, params, expected):
+    assert names(client, **params) == expected
+
+
+def test_price_range_upside_down(client):
+    response = client.get("/products", params={"min_price": 2, "max_price": 1})
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "Цена «от» больше цены «до»"
+
+
+def test_filters_combine_with_search_and_total(client, assortment):
+    body = client.get("/products", params={"q": "е", "in_stock": True, "sort": "price_desc"}).json()
+    assert [p["name"] for p in body["items"]] == ["Б-средний", "В-дешёвый"]
+    assert body["total"] == 2

@@ -17,15 +17,17 @@ def _promo(row: PromoCode) -> pricing.Promo:
                          max_uses=row.max_uses, used_count=row.used_count, expires_at=row.expires_at)
 
 
-def create_order(db: Session, user: User, data: OrderIn, now: datetime | None = None) -> Order:
-    now = now or datetime.now(UTC)
-    ids = sorted(line.product_id for line in data.items)
+def _prepare(db: Session, data: OrderIn, now: datetime, lock: bool):
+    """Проверяет товары, остатки и промокод и считает сумму. Ничего не записывает.
 
-    # SELECT … FOR UPDATE: строки товаров блокируются до конца транзакции.
-    # Два покупателя не смогут одновременно купить последнюю единицу — второй подождёт
-    # и увидит уже уменьшенный остаток. Порядок по id исключает взаимную блокировку (deadlock).
-    products = {p.id: p for p in db.scalars(select(Product).where(Product.id.in_(ids))
-                                            .order_by(Product.id).with_for_update())}
+    lock=True — для настоящего заказа: SELECT … FOR UPDATE блокирует строки товаров до конца транзакции.
+    Два покупателя не смогут одновременно купить последнюю единицу — второй подождёт
+    и увидит уже уменьшенный остаток. Порядок по id исключает взаимную блокировку (deadlock).
+    lock=False — для расчёта стоимости: блокировки не нужны, ведь ничего не меняется.
+    """
+    ids = sorted(line.product_id for line in data.items)
+    query = select(Product).where(Product.id.in_(ids)).order_by(Product.id)
+    products = {p.id: p for p in db.scalars(query.with_for_update() if lock else query)}
 
     lines = []
     for line in data.items:
@@ -41,7 +43,8 @@ def create_order(db: Session, user: User, data: OrderIn, now: datetime | None = 
 
     promo_row = None
     if data.promo_code:
-        promo_row = db.scalar(select(PromoCode).where(PromoCode.code == data.promo_code).with_for_update())
+        promo_query = select(PromoCode).where(PromoCode.code == data.promo_code)
+        promo_row = db.scalar(promo_query.with_for_update() if lock else promo_query)
         if promo_row is None:
             db.rollback()
             raise AppError(422, "promo_invalid", "Промокод не найден")
@@ -50,6 +53,19 @@ def create_order(db: Session, user: User, data: OrderIn, now: datetime | None = 
     except pricing.PromoError as exc:
         db.rollback()
         raise AppError(422, "promo_invalid", str(exc)) from None
+    return lines, promo_row, totals
+
+
+def quote_order(db: Session, data: OrderIn, now: datetime | None = None) -> pricing.Totals:
+    """Сколько будет стоить заказ — с теми же проверками, что при создании, но без резерва и без промокода."""
+    _, _, totals = _prepare(db, data, now or datetime.now(UTC), lock=False)
+    db.rollback()
+    return totals
+
+
+def create_order(db: Session, user: User, data: OrderIn, now: datetime | None = None) -> Order:
+    now = now or datetime.now(UTC)
+    lines, promo_row, totals = _prepare(db, data, now, lock=True)
 
     for product, quantity in lines:
         product.stock -= quantity
