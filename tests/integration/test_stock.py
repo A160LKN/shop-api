@@ -13,7 +13,7 @@ from app.db import SessionLocal
 from app.errors import AppError
 from app.models import Order, Product, PromoCode
 from app.schemas import OrderIn
-from app.services.orders import create_order
+from app.services.orders import cancel_order, create_order, get_order_for
 
 pytestmark = pytest.mark.integration
 
@@ -58,6 +58,28 @@ def test_promo_usage_limit_holds_under_load(db, make_user, make_product, make_pr
     assert results.count("promo_invalid") == 7
     db.expire_all()
     assert db.scalar(select(PromoCode.used_count).where(PromoCode.code == "ONLY3")) == 3
+
+
+def test_cancel_does_not_lose_a_parallel_order(db, make_user, make_product):
+    """Отмена возвращает товар на склад, а в это время другой покупатель покупает тот же товар.
+
+    Нашёл нагрузочный тест k6 (BUG-09): склад разошёлся с заказами. Заказ загружается вместе
+    с товарами, и после SELECT … FOR UPDATE SQLAlchemy брал остаток из устаревшей копии в сессии,
+    а не из свежей строки — списание параллельного заказа терялось. Здесь гонка воспроизведена
+    без случайностей: шаги идут строго по очереди.
+    """
+    user = make_user()
+    product = make_product(stock=10)
+    order = create_order(db, user, OrderIn(items=[{"product_id": product.id, "quantity": 3}]))  # склад: 7
+
+    with SessionLocal() as canceller, SessionLocal() as buyer:
+        seen = get_order_for(canceller, user, order.id)
+        assert [item.product.stock for item in seen.items] == [7]  # товар уже в сессии отмены с остатком 7
+        create_order(buyer, user, OrderIn(items=[{"product_id": product.id, "quantity": 2}]))  # склад: 5
+        cancel_order(canceller, user, order.id, gateway=None)  # заказ не оплачен — шлюз не нужен
+
+    db.expire_all()
+    assert db.get(Product, product.id).stock == 8  # 10 − 2; с багом было 10 — продажа «пропала»
 
 
 def test_order_is_all_or_nothing(db, make_user, make_product):

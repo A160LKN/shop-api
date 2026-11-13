@@ -27,7 +27,9 @@ def _prepare(db: Session, data: OrderIn, now: datetime, lock: bool):
     """
     ids = sorted(line.product_id for line in data.items)
     query = select(Product).where(Product.id.in_(ids)).order_by(Product.id)
-    products = {p.id: p for p in db.scalars(query.with_for_update() if lock else query)}
+    if lock:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    products = {p.id: p for p in db.scalars(query)}
 
     lines = []
     for line in data.items:
@@ -102,9 +104,13 @@ def _next(db: Session, order: Order, action: str) -> OrderStatus:
 
 
 def _return_stock(db: Session, order: Order) -> None:
+    """Возвращает товар на склад. populate_existing обязателен: товары могли загрузиться вместе
+    с заказом ещё до блокировки, и без него SQLAlchemy оставит в сессии старый остаток
+    вместо свежего из заблокированной строки — списание параллельного заказа потеряется (BUG-09)."""
     ids = sorted(item.product_id for item in order.items)
-    products = {p.id: p for p in db.scalars(select(Product).where(Product.id.in_(ids))
-                                            .order_by(Product.id).with_for_update())}
+    query = (select(Product).where(Product.id.in_(ids)).order_by(Product.id)
+             .with_for_update().execution_options(populate_existing=True))
+    products = {p.id: p for p in db.scalars(query)}
     for item in order.items:
         products[item.product_id].stock += item.quantity
 
