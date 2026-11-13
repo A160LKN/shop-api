@@ -71,3 +71,9 @@ def test_shipping_missing_order(client, parties):
 
 def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_root_opens_api_docs(client):
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/docs"

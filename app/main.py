@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,12 @@ app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(PoolTimeout, overload_handler)
 for module in (auth, products, promo, orders, stats):
     app.include_router(module.router)
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Адрес API без пути открывает документацию — по ссылке из резюме сразу видно, что умеет API."""
+    return RedirectResponse("/docs")
 
 
 @app.get("/health", tags=["Служебное"])
