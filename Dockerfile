@@ -11,6 +11,7 @@ COPY app app
 COPY migrations migrations
 COPY tools tools
 COPY alembic.ini .
+COPY scripts/start-render.sh scripts/start-render.sh
 
 # Приложение не работает от root
 RUN useradd --create-home shop

@@ -1,0 +1,27 @@
+# Blueprint для Render: Dashboard → New → Blueprint → выбрать этот репозиторий.
+# База — внешняя (Neon): бесплатная база Render удаляется через 30 дней.
+services:
+  - type: web
+    name: shop-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerCommand: sh scripts/start-render.sh
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false            # адрес базы из Neon — вставить при создании
+      - key: CORS_ORIGINS
+        sync: false            # адрес фронтенда на Vercel, например https://shop-web.vercel.app
+      - key: JWT_SECRET
+        generateValue: true    # Render сам создаст длинный случайный секрет
+      - key: PAYMENT_GATEWAY_URL
+        value: http://127.0.0.1:8001
+      # Бесплатный сервер маленький (512 МБ, один процесс) — пул соединений поменьше
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: DB_MAX_OVERFLOW
+        value: "5"

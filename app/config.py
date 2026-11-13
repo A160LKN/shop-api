@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +25,16 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Almaty"  # часовой пояс магазина — для «сегодня» в сводке
     admin_email: str = "admin@shop.kz"
     admin_password: str = "admin12345"
+
+    @field_validator("database_url")
+    @classmethod
+    def use_psycopg_driver(cls, url: str) -> str:
+        """Хостинги (Neon, Render, Heroku) выдают адрес вида postgresql:// или postgres://.
+        SQLAlchemy по такому адресу ищет драйвер psycopg2, а в проекте psycopg 3 — указываем его явно."""
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url.removeprefix(prefix)
+        return url
 
 
 settings = Settings()
