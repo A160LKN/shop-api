@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,12 +21,19 @@ def create_order(data: OrderIn, db: Session = Depends(get_db), user: User = Depe
 
 
 @router.get("", response_model=list[OrderOut])
-def list_orders(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Покупатель видит свои заказы, администратор — все."""
+def list_orders(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=MAX_ID),
+):
+    """Покупатель видит свои заказы, администратор — все. Новые — первыми.
+
+    Постранично: без лимита ответ рос бы бесконечно вместе с числом заказов (найдено нагрузочным тестом)."""
     query = select(Order).order_by(Order.id.desc())
     if user.role != Role.admin:
         query = query.where(Order.user_id == user.id)
-    return db.scalars(query).all()
+    return db.scalars(query.limit(limit).offset(offset)).all()
 
 
 @router.get("/{order_id}", response_model=OrderOut)

@@ -61,7 +61,7 @@ jobs:
           retention-days: 14
 
   docker:
-    name: Docker-образ и смоук-тест
+    name: Docker-образ, смоук- и нагрузочный тест
     needs: tests
     runs-on: ubuntu-24.04
     steps:
@@ -70,6 +70,15 @@ jobs:
         run: docker compose up --build --detach --wait
       - name: Смоук-тест
         run: ./scripts/smoke.sh
+      - name: Установить k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "1.4.2"
+      - name: Нагрузочный тест — 30 пользователей, пороги по времени ответа и ошибкам
+        run: k6 run -e SUMMARY_FILE=loadtest-summary.md loadtest/shop.js
+      - name: Отчёт о нагрузке на странице запуска
+        if: always()
+        run: cat loadtest-summary.md >> "$GITHUB_STEP_SUMMARY" || true
       - name: Логи приложения при падении
         if: failure()
         run: docker compose logs api payments

@@ -32,6 +32,9 @@ services:
       DATABASE_URL: postgresql+psycopg://shop:shop@db:5432/shop
       PAYMENT_GATEWAY_URL: http://payments:8001
       JWT_SECRET: local-docker-secret-at-least-32-bytes
+      # Два процесса сервера — по числу ядер. У каждого свой пул соединений с БД (до 40),
+      # поэтому 2 × 40 = 80 — укладывается в лимит PostgreSQL в 100 соединений
+      WEB_CONCURRENCY: 2
     ports:
       - "8000:8000"
     depends_on:

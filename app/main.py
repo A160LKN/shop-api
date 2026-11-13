@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.errors import AppError, app_error_handler
+from app.errors import AppError, PoolTimeout, app_error_handler, overload_handler
 from app.routers import auth, orders, products, promo
 
 app = FastAPI(
@@ -13,6 +13,7 @@ app = FastAPI(
                 "Все суммы — в тиынах (1 ₸ = 100).",
 )
 app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(PoolTimeout, overload_handler)
 for module in (auth, products, promo, orders):
     app.include_router(module.router)
 

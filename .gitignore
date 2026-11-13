@@ -10,3 +10,4 @@ test-results.xml
 .DS_Store
 .idea/
 .vscode/
+loadtest-summary.md

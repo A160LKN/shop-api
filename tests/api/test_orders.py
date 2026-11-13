@@ -169,3 +169,20 @@ def test_admin_sees_all_orders(client, make_user, make_product):
 
     assert client.get(f"/orders/{created['id']}", headers=admin).status_code == 200
     assert len(client.get("/orders", headers=admin).json()) == 1
+
+
+def test_orders_list_is_paginated(client, make_user, make_product):
+    user = make_user()
+    product = make_product(stock=10)
+    ids = [order(client, user, [(product, 1)]).json()["id"] for _ in range(5)]
+
+    first = client.get("/orders", params={"limit": 2}, headers=auth(user)).json()
+    rest = client.get("/orders", params={"limit": 2, "offset": 2}, headers=auth(user)).json()
+
+    assert [o["id"] for o in first] == ids[::-1][:2]  # новые — первыми
+    assert [o["id"] for o in rest] == ids[::-1][2:4]
+
+
+@pytest.mark.parametrize(("limit", "code"), [(0, 422), (1, 200), (200, 200), (201, 422)])
+def test_orders_limit_boundaries(client, make_user, limit, code):
+    assert client.get("/orders", params={"limit": limit}, headers=auth(make_user())).status_code == code

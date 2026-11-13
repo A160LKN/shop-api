@@ -7,8 +7,11 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 
 from app.config import settings
+from app.db import get_db
+from app.main import app
 from app.models import Role
 from tests.conftest import auth
 
@@ -102,3 +105,21 @@ def test_promo_expiry_in_almaty_time(client, admin):
     body = {"code": "ASTANA", "percent": 10, "max_uses": 1, "expires_at": "2030-01-01T00:00:00+05:00"}
     response = client.post("/promo-codes", json=body, headers=auth(admin))
     assert response.status_code == 201
+
+
+# ---------- Перегрузка: пул соединений с БД исчерпан (найдено нагрузочным тестом) ----------
+
+def test_exhausted_db_pool_gives_503_not_500(client):
+    def no_free_connections():
+        raise PoolTimeout("QueuePool limit reached")
+        yield  # pragma: no cover — делает функцию генератором, как настоящую get_db
+
+    app.dependency_overrides[get_db] = no_free_connections
+    try:
+        response = client.get("/products")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "5"
+    assert response.json()["error"]["code"] == "overloaded"
