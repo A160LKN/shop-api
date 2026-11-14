@@ -21,6 +21,17 @@ from app.db import SessionLocal, engine  # noqa: E402
 from app.models import Product, PromoCode, Role, User  # noqa: E402
 from app.security import create_token, hash_password  # noqa: E402
 
+LEVELS = {"unit", "integration", "api"}
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items):
+    """CI запускает тесты по уровням (-m unit, -m "integration or api"): тест без уровня молча не запустится нигде."""
+    unmarked = [item.nodeid for item in items if not LEVELS & {m.name for m in item.iter_markers()}]
+    if unmarked:
+        raise pytest.UsageError("Тесты без уровня unit, integration или api не попадут в CI:\n" + "\n".join(unmarked))
+
+
 TABLES = "order_items, orders, promo_codes, products, users"
 PASSWORD = "secret-pass-123"
 _ids = count(1)

@@ -3,6 +3,8 @@ import pytest
 
 from app.config import Settings
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.mark.parametrize(("given", "expected"), [
     ("postgresql://u:p@ep-x.neon.tech/shop?sslmode=require",
