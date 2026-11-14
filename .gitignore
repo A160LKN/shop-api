@@ -11,3 +11,5 @@ test-results.xml
 .idea/
 .vscode/
 loadtest-summary.md
+allure-results/
+site/
