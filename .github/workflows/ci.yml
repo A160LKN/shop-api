@@ -45,11 +45,11 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       - name: Юнит-тесты — без БД
-        run: pytest -m unit --alluredir=allure-results
+        run: pytest -m unit --cov --cov-report= --alluredir=allure-results
       - name: Интеграционные и API-тесты — на PostgreSQL
         run: >-
           pytest -m "integration or api"
-          --cov --cov-report=term --cov-report=html --cov-fail-under=90
+          --cov --cov-append --cov-report=term --cov-report=html --cov-fail-under=90
           --junitxml=test-results.xml --alluredir=allure-results
 
       - name: Сохранить отчёт о покрытии
