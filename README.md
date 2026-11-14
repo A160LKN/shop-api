@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/A160LKN/shop-api/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/A160LKN/shop-api/actions/workflows/ci.yml)
 
+**Русский** · [English](README.en.md)
+
 Бэкенд интернет-магазина и полная пирамида тестов к нему: юнит-тесты, интеграционные тесты на настоящем PostgreSQL, API-тесты, мок внешнего платёжного шлюза, смоук-тест Docker-образа и нагрузочный тест на k6 в CI.
 
 **Работает онлайн:** [документация API](https://shop-api-yka7.onrender.com/docs) · [магазин на этом API](https://shop-web-azure.vercel.app). Бесплатный сервер засыпает после простоя, поэтому первый запрос может идти до минуты.
