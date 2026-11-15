@@ -40,13 +40,13 @@ stateDiagram-v2
 **Tests:** pytest, respx (HTTP mocking), pytest-cov, Allure, k6, ruff
 **Infrastructure:** Docker, Docker Compose, GitHub Actions
 
-## Test pyramid — 227 tests
+## Test pyramid — 243 tests
 
 | Level       | Tests        | What they check                                                                                     | Speed         |
 | ----------- | ------------ | --------------------------------------------------------------------------------------------------- | ------------- |
-| Unit        | 58           | totals and discounts, all 20 "status × action" pairs, passwords and tokens, settings                | 0.3 s, no DB  |
+| Unit        | 59           | totals and discounts, all 20 "status × action" pairs, passwords and tokens, settings                | 0.3 s, no DB  |
 | Integration | 7            | concurrent orders, transaction atomicity, DB constraints, migrations                                | on PostgreSQL |
-| API         | 162          | whole endpoints: validation, permissions, business rules, payments via the gateway mock, edge cases | on PostgreSQL |
+| API         | 177          | whole endpoints: validation, permissions, business rules, payments via the gateway mock, edge cases | on PostgreSQL |
 | Smoke       | 8 checks     | the built Docker image: order, promo code, payment, declined card                                   | in CI         |
 | Load        | k6, 30 users | response time, errors, stock integrity after the load                                               | in CI         |
 
@@ -82,6 +82,11 @@ A lock is not enough if the ORM reads something other than what is locked. BUG-0
 - **Sign-in**: the same response for a wrong password and an unknown email, so registered users cannot be enumerated.
 - **Search**: `%`, `_` and SQL injection in the search string neither break the query nor match everything.
 - **Extra fields are rejected**: `"role": "admin"` at sign-up is a `422`, not silently ignored.
+- **Brute force**: 5 failed logins in 15 minutes per email + IP give `429` with `Retry-After`; spoofing IPs does not help — a second limit allows 20 attempts per email from any address.
+- **Weak passwords** (`12345678`, `password`, equal to the email) are rejected; sign-ups are limited to 10 per hour per IP.
+- **Security headers** on every response: CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy.
+- **No leaks in errors**: a 500 returns only a code and a request ID; bodies over 256 KB are rejected before parsing.
+- **Automated in CI**: pip-audit, CodeQL and an OWASP ZAP scan of the running API. Policy: [SECURITY.md](SECURITY.md).
 
 ### Test design
 

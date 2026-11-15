@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Адреса фронтендов, которым браузер разрешит обращаться к API (CORS), через запятую
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     timezone: str = "Asia/Almaty"  # часовой пояс магазина — для «сегодня» в сводке
+    # Render ставит API за прокси: адрес клиента — в X-Forwarded-For. Локально заголовку не доверяем
+    trust_proxy: bool = False
+    login_attempts: int = 5  # неудачных входов за 15 минут на пару «email + IP»
+    registrations_per_hour: int = 10  # с одного IP
     admin_email: str = "admin@shop.kz"
     admin_password: str = "admin12345"
 

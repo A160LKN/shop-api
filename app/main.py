@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -7,7 +9,10 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.errors import AppError, PoolTimeout, app_error_handler, overload_handler
+from app.middleware import HttpMiddleware
 from app.routers import auth, orders, products, promo, stats
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 app = FastAPI(
     title="Shop API",
@@ -22,8 +27,10 @@ app.add_middleware(
     allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["X-Request-ID", "Retry-After"],
     max_age=600,
 )
+app.add_middleware(HttpMiddleware)  # заголовки безопасности, ID запроса, журнал, лимит размера тела
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(PoolTimeout, overload_handler)
 for module in (auth, products, promo, orders, stats):

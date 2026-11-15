@@ -2,12 +2,17 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
+from app import ratelimit
 from app.config import settings
 from app.main import app
 
 
 @pytest.fixture
 def client(clean_db):
+    # Счётчики попыток живут в памяти процесса — между тестами их сбрасываем
+    ratelimit.failed_logins.reset()
+    ratelimit.registrations.reset()
+    ratelimit.failed_logins_per_email.reset()
     with TestClient(app) as test_client:
         yield test_client
 

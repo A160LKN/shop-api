@@ -1,0 +1,12 @@
+# Правила OWASP ZAP для Shop API. Формат: id	действие	комментарий
+# FAIL — уронить сборку, WARN — только предупредить, IGNORE — не относится к JSON API.
+10020	FAIL	Нет защиты от встраивания во фрейм (X-Frame-Options)
+10021	FAIL	Нет X-Content-Type-Options: nosniff
+10035	FAIL	Нет Strict-Transport-Security
+10038	FAIL	Нет Content-Security-Policy
+40012	FAIL	Отражённый XSS
+40014	FAIL	Хранимый XSS
+40018	FAIL	SQL-инъекция
+90019	FAIL	Серверная инъекция кода
+90020	FAIL	Инъекция команд ОС
+10049	IGNORE	Кешируемость: ответы API и так приватные (Authorization)

@@ -41,7 +41,8 @@ def test_invalid_email(client, email):
 
 @pytest.mark.parametrize(
     ("password", "code"),
-    [("1234567", 422), ("12345678", 201), ("x" * 128, 201), ("x" * 129, 422)],
+    # Границы длины — на надёжных паролях: простые вроде «12345678» теперь отклоняются отдельной проверкой
+    [("k7#mq2z", 422), ("k7#mq2zp", 201), ("k7#m" * 32, 201), ("k7#m" * 32 + "q", 422)],
     ids=["7-chars", "8-chars", "128-chars", "129-chars"],
 )
 def test_password_length_boundaries(client, password, code):

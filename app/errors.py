@@ -6,12 +6,13 @@ from sqlalchemy.exc import TimeoutError as PoolTimeout
 class AppError(Exception):
     """Ошибка бизнес-логики: код для программ, текст — для человека."""
 
-    def __init__(self, status: int, code: str, message: str):
-        self.status, self.code, self.message = status, code, message
+    def __init__(self, status: int, code: str, message: str, headers: dict[str, str] | None = None):
+        self.status, self.code, self.message, self.headers = status, code, message, headers
 
 
 async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status, content={"error": {"code": exc.code, "message": exc.message}})
+    return JSONResponse(status_code=exc.status, headers=exc.headers,
+                        content={"error": {"code": exc.code, "message": exc.message}})
 
 
 async def overload_handler(_: Request, __: PoolTimeout) -> JSONResponse:

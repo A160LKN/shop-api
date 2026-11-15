@@ -13,3 +13,4 @@ test-results.xml
 loadtest-summary.md
 allure-results/
 site/
+zap-report.html
