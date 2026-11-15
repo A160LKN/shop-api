@@ -149,7 +149,9 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://localhost:8000/health && break; sleep 1; done
       - name: ZAP API scan по OpenAPI-схеме
         run: |
-          docker run --network host -v "$PWD:/zap/wrk:rw" -t ghcr.io/zaproxy/zaproxy:stable \
+          # Контейнер ZAP работает не от root: ему нужна своя папка с правом записи для отчёта
+          mkdir -p zap && cp zap-rules.tsv zap/ && chmod -R a+rwx zap
+          docker run --network host -v "$PWD/zap:/zap/wrk:rw" -t ghcr.io/zaproxy/zaproxy:stable \
             zap-api-scan.py -t http://localhost:8000/openapi.json -f openapi \
             -c zap-rules.tsv -r zap-report.html -I
       - name: Сохранить отчёт ZAP
@@ -157,5 +159,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: zap-report
-          path: zap-report.html
+          path: zap/zap-report.html
           retention-days: 14
