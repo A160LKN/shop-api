@@ -10,3 +10,4 @@
 90019	FAIL	Серверная инъекция кода
 90020	FAIL	Инъекция команд ОС
 10049	IGNORE	Кешируемость: ответы API и так приватные (Authorization)
+10106	IGNORE	Только HTTP: в CI сканируется http://localhost, на проде API отдаётся только по HTTPS (Render перенаправляет HTTP на HTTPS)
