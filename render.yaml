@@ -14,9 +14,6 @@ services:
         sync: false            # адрес базы из Neon — вставить при создании
       - key: CORS_ORIGINS
         sync: false            # адрес фронтенда на Vercel, например https://shop-web.vercel.app
-      # Живой сайт: секреты по умолчанию запрещены, без JWT_SECRET сервер не стартует
-      - key: ENVIRONMENT
-        value: production
       - key: JWT_SECRET
         generateValue: true    # Render сам создаст длинный случайный секрет
       # Пароль администратора демо опубликован в README: каждый старт сервера возвращает
@@ -28,14 +25,8 @@ services:
       # Бесплатный сервер маленький (512 МБ, один процесс) — пул соединений поменьше
       - key: WEB_CONCURRENCY
         value: "1"
-      # Адрес клиента для лимитов входа и регистрации (см. app/ratelimit.py:client_ip).
-      # Render стоит за Cloudflare: True-Client-IP выставляет Cloudflare, X-Forwarded-For — «…, клиент, Cloudflare»
-      - key: CLIENT_IP_HEADER
-        value: true-client-ip
-      - key: TRUST_PROXY
-        value: "true"
-      - key: PROXY_HOPS
-        value: "2"
+      # Адрес клиента для лимитов (TRUST_PROXY, PROXY_HOPS, CLIENT_IP_HEADER) и ENVIRONMENT=production
+      # на Render включаются сами — по переменной RENDER=true, которую Render задаёт каждому сервису (app/config.py)
       - key: DB_POOL_SIZE
         value: "5"
       - key: DB_MAX_OVERFLOW

@@ -75,7 +75,7 @@ def client_ip(request: Request) -> str:
 
     Левый адрес в X-Forwarded-For присылает сам клиент — ему верить нельзя: подставив новый адрес,
     можно обойти любой лимит. Поэтому по порядку:
-    1. client_ip_header (на Render — True-Client-IP): его выставляет Cloudflare, клиент подделать не может;
+    1. client_ip_header (на Render — CF-Connecting-IP): его ставит Cloudflare и перезаписывает присланный клиентом;
     2. адрес на позиции proxy_hops справа в X-Forwarded-For: каждый прокси дописывает адрес в конец,
        и только эти записи — от наших прокси (на Render: «…, клиент, Cloudflare» — значит, 2);
     3. адрес TCP-соединения.
