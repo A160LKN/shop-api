@@ -40,13 +40,13 @@ stateDiagram-v2
 **Tests:** pytest, respx (HTTP mocking), pytest-cov, Allure, k6, ruff
 **Infrastructure:** Docker, Docker Compose, GitHub Actions
 
-## Test pyramid — 243 tests
+## Test pyramid — 260 tests
 
 | Level       | Tests        | What they check                                                                                     | Speed         |
 | ----------- | ------------ | --------------------------------------------------------------------------------------------------- | ------------- |
-| Unit        | 59           | totals and discounts, all 20 "status × action" pairs, passwords and tokens, settings                | 0.3 s, no DB  |
-| Integration | 7            | concurrent orders, transaction atomicity, DB constraints, migrations                                | on PostgreSQL |
-| API         | 177          | whole endpoints: validation, permissions, business rules, payments via the gateway mock, edge cases | on PostgreSQL |
+| Unit        | 67           | totals and discounts, all 20 "status × action" pairs, passwords and tokens, settings                | 0.3 s, no DB  |
+| Integration | 10           | concurrent orders, transaction atomicity, DB constraints, migrations, demo catalogue reset          | on PostgreSQL |
+| API         | 183          | whole endpoints: validation, permissions, business rules, payments via the gateway mock, edge cases | on PostgreSQL |
 | Smoke       | 8 checks     | the built Docker image: order, promo code, payment, declined card                                   | in CI         |
 | Load        | k6, 30 users | response time, errors, stock integrity after the load                                               | in CI         |
 
