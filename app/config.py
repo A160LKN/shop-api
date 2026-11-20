@@ -25,10 +25,18 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Almaty"  # часовой пояс магазина — для «сегодня» в сводке
     # Render ставит API за прокси: адрес клиента — в X-Forwarded-For. Локально заголовку не доверяем
     trust_proxy: bool = False
+    # Сколько наших прокси дописывают адрес в конец X-Forwarded-For. На Render: «…, клиент, Cloudflare» — 2
+    proxy_hops: int = 1
+    # Заголовок с адресом клиента от доверенного прокси, например true-client-ip у Cloudflare (Render).
+    # Пусто — не используется: без такого прокси заголовок подделает кто угодно
+    client_ip_header: str = ""
     login_attempts: int = 5  # неудачных входов за 15 минут на пару «email + IP»
     registrations_per_hour: int = 10  # с одного IP
     admin_email: str = "admin@shop.kz"
     admin_password: str = "admin12345"
+    # Демо на Render: при старте вернуть каталог и промокоды к исходному виду (см. app/seed.py).
+    # Пароль администратора демо публичный — без сброса витрину мог бы испортить любой посетитель
+    demo_reset: bool = False
 
     @field_validator("database_url")
     @classmethod

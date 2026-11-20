@@ -1,7 +1,16 @@
-"""Демо-данные: администратор, товары и промокоды. Повторный запуск ничего не дублирует."""
+"""Демо-данные: администратор, товары и промокоды. Повторный запуск ничего не дублирует.
+
+Пароль администратора демо опубликован в README, поэтому на живом сайте любой посетитель — администратор.
+С DEMO_RESET=true (так на Render) каждый старт возвращает витрину к исходному виду: цены, остатки,
+видимость товаров и промокоды. Бесплатный сервер засыпает после простоя, так что сброс происходит
+регулярно, а испорченный каталог живёт не дольше одной «сессии» сервера.
+Заказы покупателей не трогаются. Пользователей тоже: сменить пароль или выдать роль администратора
+через API нельзя.
+"""
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import SessionLocal
@@ -29,6 +38,17 @@ PRODUCTS = [
     ("Курт солёный, 300 г", "food", 2_490_00, 45),
 ]
 
+# (код, скидка %, минимальная сумма заказа в тиынах, лимит использований)
+PROMOS = [
+    ("WELCOME10", 10, 0, 1000),
+    ("BIG20", 20, 100_000_00, 100),
+]
+
+
+def _promo_rows(now: datetime) -> list[PromoCode]:
+    year = now + timedelta(days=365)
+    return [PromoCode(code=c, percent=p, min_order_total=m, max_uses=u, expires_at=year) for c, p, m, u in PROMOS]
+
 
 def seed() -> None:
     with SessionLocal() as db:
@@ -38,14 +58,37 @@ def seed() -> None:
         if db.scalar(select(Product).limit(1)) is None:
             db.add_all(Product(name=n, category=c, price=p, stock=s) for n, c, p, s in PRODUCTS)
         if db.scalar(select(PromoCode).limit(1)) is None:
-            year = datetime.now(UTC) + timedelta(days=365)
-            db.add_all([
-                PromoCode(code="WELCOME10", percent=10, min_order_total=0, max_uses=1000, expires_at=year),
-                PromoCode(code="BIG20", percent=20, min_order_total=100_000_00, max_uses=100, expires_at=year),
-            ])
+            db.add_all(_promo_rows(datetime.now(UTC)))
         db.commit()
+        if settings.demo_reset:
+            reset_demo(db)
+
+
+def reset_demo(db: Session, now: datetime | None = None) -> None:
+    """Вернуть витрину демо к исходному виду. Одна транзакция: сайт не увидит каталог наполовину сброшенным."""
+    now = now or datetime.now(UTC)
+
+    # Товары из списка — с исходными ценой, остатком и видимостью. Удалять строки нельзя: на товары
+    # ссылаются позиции заказов. Поэтому всё лишнее (добавленное или переименованное посетителями) — скрывается
+    keep: set[int] = set()
+    for name, category, price, stock in PRODUCTS:
+        query = select(Product).where(Product.name == name).order_by(Product.id).limit(1)
+        product = db.scalar(query.where(Product.id.not_in(keep)) if keep else query)
+        if product is None:
+            product = Product(name=name)
+            db.add(product)
+        product.category, product.price, product.stock, product.is_active = category, price, stock, True
+        db.flush()
+        keep.add(product.id)
+    db.execute(update(Product).where(Product.id.not_in(keep)).values(is_active=False))
+
+    # Промокоды заказы хранят строкой, а не ссылкой — посторонние (например, «скидка 90 %») можно удалить
+    db.execute(delete(PromoCode))
+    db.add_all(_promo_rows(now))
+
+    db.commit()
 
 
 if __name__ == "__main__":
     seed()
-    print("Демо-данные готовы")
+    print("Демо-данные готовы" + (" и сброшены к исходному виду" if settings.demo_reset else ""))

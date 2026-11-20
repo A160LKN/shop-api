@@ -3,6 +3,7 @@
 Окно скользящее, счётчики в памяти процесса: на бесплатном Render работает один экземпляр API.
 При нескольких экземплярах счётчики нужно вынести в общее хранилище (Redis или таблицу).
 """
+import ipaddress
 import threading
 import time
 from collections import defaultdict, deque
@@ -20,9 +21,15 @@ class SlidingWindow:
         self._lock = threading.Lock()
 
     def _prune(self, key: str, now: float) -> deque[float]:
-        hits = self._hits[key]
+        """Старые попытки — прочь. Пустой ключ удаляется: иначе каждый новый email или IP
+        оставался бы в памяти навсегда, и поток случайных адресов съел бы память процесса."""
+        hits = self._hits.get(key)
+        if hits is None:
+            return deque()
         while hits and hits[0] <= now - self.seconds:
             hits.popleft()
+        if not hits:
+            del self._hits[key]
         return hits
 
     def check(self, key: str) -> None:
@@ -37,7 +44,9 @@ class SlidingWindow:
 
     def hit(self, key: str) -> None:
         with self._lock:
-            self._hits[key].append(time.monotonic())
+            now = time.monotonic()
+            self._prune(key, now)
+            self._hits[key].append(now)
 
     def reset(self, key: str | None = None) -> None:
         with self._lock:
@@ -54,10 +63,31 @@ failed_logins_per_email = SlidingWindow(limit=settings.login_attempts * 4, secon
 registrations = SlidingWindow(limit=settings.registrations_per_hour, seconds=60 * 60)
 
 
+def _valid_ip(value: str) -> str | None:
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
 def client_ip(request: Request) -> str:
-    """За прокси Render настоящий адрес клиента — первый в X-Forwarded-For."""
-    if settings.trust_proxy:
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+    """Адрес клиента для лимитов.
+
+    Левый адрес в X-Forwarded-For присылает сам клиент — ему верить нельзя: подставив новый адрес,
+    можно обойти любой лимит. Поэтому по порядку:
+    1. client_ip_header (на Render — True-Client-IP): его выставляет Cloudflare, клиент подделать не может;
+    2. адрес на позиции proxy_hops справа в X-Forwarded-For: каждый прокси дописывает адрес в конец,
+       и только эти записи — от наших прокси (на Render: «…, клиент, Cloudflare» — значит, 2);
+    3. адрес TCP-соединения.
+    """
+    if settings.client_ip_header:
+        ip = _valid_ip(request.headers.get(settings.client_ip_header, ""))
+        if ip:
+            return ip
+    if settings.trust_proxy and settings.proxy_hops > 0:
+        hops = [h for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+        if len(hops) >= settings.proxy_hops:
+            ip = _valid_ip(hops[-settings.proxy_hops])
+            if ip:
+                return ip
     return request.client.host if request.client else "unknown"
