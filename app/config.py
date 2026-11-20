@@ -1,4 +1,6 @@
-from pydantic import field_validator
+from typing import Literal
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,6 +8,9 @@ class Settings(BaseSettings):
     """Настройки из переменных окружения (или файла .env)."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # production — живой сайт: там значения по умолчанию из этого файла запрещены (см. no_dev_secrets_in_production)
+    environment: Literal["development", "test", "production"] = "development"
 
     database_url: str = "postgresql+psycopg://shop:shop@localhost:5432/shop"
     # Пул соединений с БД. Сервер обрабатывает до 40 запросов одновременно (пул потоков FastAPI),
@@ -37,6 +42,14 @@ class Settings(BaseSettings):
     # Демо на Render: при старте вернуть каталог и промокоды к исходному виду (см. app/seed.py).
     # Пароль администратора демо публичный — без сброса витрину мог бы испортить любой посетитель
     demo_reset: bool = False
+
+    @model_validator(mode="after")
+    def no_dev_secrets_in_production(self) -> "Settings":
+        """Секрет по умолчанию опубликован в репозитории: с ним любой подпишет себе токен.
+        Забыли задать JWT_SECRET на живом сайте — сервер не стартует, а не работает с известным ключом."""
+        if self.environment == "production" and (self.jwt_secret.startswith("dev-") or len(self.jwt_secret) < 32):
+            raise ValueError("JWT_SECRET по умолчанию или короче 32 символов нельзя использовать в production")
+        return self
 
     @field_validator("database_url")
     @classmethod

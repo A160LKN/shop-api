@@ -36,10 +36,12 @@ class PaymentGateway:
             raise PaymentUnavailable(f"шлюз ответил {response.status_code}")
         return response
 
-    def charge(self, order_id: int, amount: int, card_token: str) -> ChargeResult:
-        # Idempotency-Key: при повторной отправке того же заказа шлюз не спишет деньги дважды
+    def charge(self, order_id: int, amount: int, card_token: str, attempt: int = 0) -> ChargeResult:
+        # Idempotency-Key: повтор той же попытки (обрыв связи, таймаут) шлюз не спишет второй раз.
+        # Номер попытки в ключе: после отказа новая попытка — новый ключ, иначе шлюз вернул бы старый отказ
         response = self._post("/payments", {"order_id": order_id, "amount": amount, "currency": "KZT",
-                                            "card_token": card_token}, idempotency_key=f"order-{order_id}-charge")
+                                            "card_token": card_token},
+                              idempotency_key=f"order-{order_id}-charge-{attempt}")
         body = response.json()
         if response.status_code == 200 and body.get("status") == "approved":
             return ChargeResult(approved=True, payment_id=body["payment_id"])

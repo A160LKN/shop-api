@@ -1,9 +1,10 @@
-"""Операции с заказами. Каждая — одна транзакция: либо всё, либо ничего."""
-from datetime import UTC, datetime
+"""Операции с заказами. Каждая — одна транзакция: либо всё, либо ничего. Исключение — оплата (см. pay_order)."""
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.domain import pricing
 from app.domain.order_status import TransitionError, next_status
 from app.errors import AppError, not_found
@@ -115,24 +116,61 @@ def _return_stock(db: Session, order: Order) -> None:
         products[item.product_id].stock += item.quantity
 
 
-def pay_order(db: Session, user: User, order_id: int, card_token: str, gateway: PaymentGateway) -> Order:
-    order = get_order_for(db, user, order_id, lock=True)  # блокировка: двойной клик «Оплатить» не спишет дважды
+def _payment_window() -> timedelta:
+    """Сколько считать оплату «идущей». Дольше любого ответа шлюза: если сервер упал посреди оплаты,
+    отметка устареет, и заказ снова можно будет оплатить или отменить."""
+    return timedelta(seconds=settings.payment_timeout_seconds * 3)
+
+
+def _payment_in_progress(db: Session, order: Order, now: datetime) -> None:
+    if order.payment_started_at is not None and order.payment_started_at > now - _payment_window():
+        db.rollback()
+        raise AppError(409, "payment_in_progress", "Оплата заказа уже идёт — дождитесь результата")
+
+
+def _lock_order(db: Session, order_id: int) -> Order:
+    return db.scalar(select(Order).where(Order.id == order_id).with_for_update()
+                     .execution_options(populate_existing=True))
+
+
+def pay_order(db: Session, user: User, order_id: int, card_token: str, gateway: PaymentGateway,
+              now: datetime | None = None) -> Order:
+    """Оплата в три шага, и строка заказа ни разу не заблокирована на время запроса к шлюзу.
+
+    1. Короткая транзакция: проверить заказ и отметить «оплата началась». Двойной клик «Оплатить»
+       или отмена в этот момент получат 409 — двойного списания нет.
+    2. Запрос к шлюзу без блокировок: шлюз может думать до таймаута, остальные запросы к заказу не ждут
+       и не занимают соединения с базой.
+    3. Короткая транзакция: записать результат и снять отметку.
+    """
+    now = now or datetime.now(UTC)
+    order = get_order_for(db, user, order_id, lock=True)
     if order.user_id != user.id:
         db.rollback()
         raise AppError(403, "forbidden", "Оплатить заказ может только покупатель")
-    new_status = _next(db, order, "pay")  # статус меняем только после ответа шлюза
+    _next(db, order, "pay")  # заказ можно оплатить; сам статус меняется только после ответа шлюза
+    _payment_in_progress(db, order, now)
+    order.payment_started_at = now
+    attempt, amount = order.payment_attempt, order.total
+    db.commit()
 
     try:
-        result = gateway.charge(order.id, order.total, card_token)
+        result = gateway.charge(order_id, amount, card_token, attempt=attempt)
     except PaymentUnavailable:
-        db.rollback()
+        # Итог неизвестен: номер попытки тот же, и повтор с тем же ключом не спишет деньги второй раз
+        order = _lock_order(db, order_id)
+        order.payment_started_at = None
+        db.commit()
         raise AppError(502, "payment_unavailable",
                        "Платёжный сервис не отвечает. Деньги не списаны — попробуйте ещё раз позже") from None
-    if not result.approved:
-        db.rollback()
-        raise AppError(402, "payment_declined", f"Оплата отклонена: {result.reason}")
 
-    order.status = new_status
+    order = _lock_order(db, order_id)
+    order.payment_started_at = None
+    if not result.approved:
+        order.payment_attempt = attempt + 1  # другая карта — новая попытка с новым ключом
+        db.commit()
+        raise AppError(402, "payment_declined", f"Оплата отклонена: {result.reason}")
+    order.status = _next(db, order, "pay")
     order.payment_id = result.payment_id
     db.commit()
     return order
@@ -140,6 +178,7 @@ def pay_order(db: Session, user: User, order_id: int, card_token: str, gateway: 
 
 def cancel_order(db: Session, user: User, order_id: int, gateway: PaymentGateway) -> Order:
     order = get_order_for(db, user, order_id, lock=True)
+    _payment_in_progress(db, order, datetime.now(UTC))  # иначе деньги спишутся за уже отменённый заказ
     was_paid = order.status == OrderStatus.paid
     new_status = _next(db, order, "cancel")
     if was_paid:
