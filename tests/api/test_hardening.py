@@ -109,3 +109,13 @@ def test_unexpected_error_hides_details_but_gives_request_id(client):
     assert r.json()["error"] == {"code": "internal_error", "message": "Внутренняя ошибка сервера",
                                  "request_id": r.headers["X-Request-ID"]}
     assert "секрет" not in r.text
+
+
+def test_spoofed_leftmost_forwarded_for_does_not_bypass_registration_limit(client, monkeypatch):
+    """Как на Render: клиент дописывает слева новый «адрес» в каждом запросе — лимит всё равно срабатывает."""
+    monkeypatch.setattr(settings, "trust_proxy", True)
+    monkeypatch.setattr(settings, "proxy_hops", 2)
+    for n in range(settings.registrations_per_hour + 1):
+        r = client.post("/auth/register", json={"email": f"spoof{n}@test.kz", "password": PASSWORD},
+                        headers={"X-Forwarded-For": f"6.6.{n}.6, 99.61.165.29, 104.22.17.40"})
+    assert r.status_code == 429
