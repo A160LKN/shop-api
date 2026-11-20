@@ -11,12 +11,12 @@ COPY app app
 COPY migrations migrations
 COPY tools tools
 COPY alembic.ini .
-COPY scripts/start-render.sh scripts/start-render.sh
+COPY scripts/start.sh scripts/start-render.sh scripts/
 
 # Приложение не работает от root
 RUN useradd --create-home shop
 USER shop
 
 EXPOSE 8000
-# При старте: применить миграции, загрузить демо-данные, запустить сервер
-CMD ["sh", "-c", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# При старте: миграции, демо-данные, сервер — тот же сценарий, что на Render (scripts/start.sh)
+CMD ["sh", "scripts/start.sh"]
