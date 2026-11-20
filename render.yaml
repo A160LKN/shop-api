@@ -14,6 +14,9 @@ services:
         sync: false            # адрес базы из Neon — вставить при создании
       - key: CORS_ORIGINS
         sync: false            # адрес фронтенда на Vercel, например https://shop-web.vercel.app
+      # Живой сайт: секреты по умолчанию запрещены, без JWT_SECRET сервер не стартует
+      - key: ENVIRONMENT
+        value: production
       - key: JWT_SECRET
         generateValue: true    # Render сам создаст длинный случайный секрет
       # Пароль администратора демо опубликован в README: каждый старт сервера возвращает

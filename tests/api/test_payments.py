@@ -1,11 +1,14 @@
 """Оплата и возврат через внешний шлюз. Шлюз заменён моком (respx):
 можно проверить отказ, таймаут и падение шлюза — на настоящем сервисе такое не воспроизвести по заказу."""
 import json
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from sqlalchemy import select, text
 
-from app.models import Product, Role
+from app.db import SessionLocal
+from app.models import Order, Product, Role
 from tests.conftest import auth
 
 pytestmark = pytest.mark.api
@@ -52,7 +55,7 @@ def test_successful_payment(client, gateway, customer, new_order):
     sent = charge.calls.last.request
     assert json.loads(sent.content) == {"order_id": order_id, "amount": 50_000_00, "currency": "KZT",
                                         "card_token": "tok_visa"}
-    assert sent.headers["Idempotency-Key"] == f"order-{order_id}-charge"
+    assert sent.headers["Idempotency-Key"] == f"order-{order_id}-charge-0"
 
 
 def test_declined_payment_keeps_order_and_allows_retry(client, gateway, customer, new_order):
@@ -68,6 +71,69 @@ def test_declined_payment_keeps_order_and_allows_retry(client, gateway, customer
     assert status_of(client, customer, order_id) == "created"
 
     assert pay(client, customer, order_id).json()["status"] == "paid"  # с другой картой — получилось
+
+
+def test_retry_after_decline_uses_new_idempotency_key(client, gateway, customer, new_order):
+    """Настоящий шлюз на повтор с тем же ключом вернул бы прежний отказ — другой картой было бы не оплатить."""
+    order_id, _ = new_order
+    charge = gateway.post("/payments").mock(side_effect=[
+        httpx.Response(200, json={"status": "declined", "reason": "недостаточно средств"}),
+        APPROVED,
+    ])
+    pay(client, customer, order_id, card_token="tok_empty")
+    pay(client, customer, order_id)
+    keys = [call.request.headers["Idempotency-Key"] for call in charge.calls]
+    assert keys == [f"order-{order_id}-charge-0", f"order-{order_id}-charge-1"]
+
+
+def test_retry_after_gateway_failure_reuses_idempotency_key(client, gateway, customer, new_order):
+    """Шлюз не ответил — неизвестно, списал ли он деньги. Повтор с тем же ключом не спишет их второй раз."""
+    order_id, _ = new_order
+    charge = gateway.post("/payments").mock(side_effect=[httpx.ReadTimeout("timeout"), APPROVED])
+    assert pay(client, customer, order_id).status_code == 502
+    assert pay(client, customer, order_id).json()["status"] == "paid"
+    keys = [call.request.headers["Idempotency-Key"] for call in charge.calls]
+    assert keys == [f"order-{order_id}-charge-0"] * 2
+
+
+def test_order_row_is_not_locked_while_gateway_answers(client, gateway, customer, new_order):
+    """Пока шлюз думает, строка заказа свободна: соседние запросы не ждут и не держат соединения с базой."""
+    order_id, _ = new_order
+    seen = {}
+
+    def slow_gateway(request):
+        with SessionLocal() as other:
+            # NOWAIT: заблокированная строка дала бы ошибку сразу, а не ожидание
+            other.execute(text("SELECT id FROM orders WHERE id = :id FOR UPDATE NOWAIT"), {"id": order_id})
+            seen["started"] = other.scalar(select(Order.payment_started_at).where(Order.id == order_id))
+            other.rollback()
+        return APPROVED
+
+    gateway.post("/payments").mock(side_effect=slow_gateway)
+    assert pay(client, customer, order_id).json()["status"] == "paid"
+    assert seen["started"] is not None, "пока шлюз отвечал, заказ был отмечен «оплата идёт»"
+
+
+def test_second_payment_or_cancel_while_paying_is_rejected(client, db, gateway, customer, new_order):
+    order_id, _ = new_order
+    charge = gateway.post("/payments").mock(return_value=APPROVED)
+    order = db.get(Order, order_id)
+    order.payment_started_at = datetime.now(UTC)  # первый запрос к шлюзу ещё идёт
+    db.commit()
+
+    assert pay(client, customer, order_id).json()["error"]["code"] == "payment_in_progress"
+    assert client.post(f"/orders/{order_id}/cancel", headers=auth(customer)).status_code == 409
+    assert not charge.called
+
+
+def test_stale_payment_mark_does_not_block_order(client, db, gateway, customer, new_order):
+    """Сервер упал посреди оплаты — отметка устаревает, и заказ снова можно оплатить."""
+    order_id, _ = new_order
+    gateway.post("/payments").mock(return_value=APPROVED)
+    order = db.get(Order, order_id)
+    order.payment_started_at = datetime.now(UTC) - timedelta(minutes=5)
+    db.commit()
+    assert pay(client, customer, order_id).json()["status"] == "paid"
 
 
 @pytest.mark.parametrize(

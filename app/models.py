@@ -78,6 +78,11 @@ class Order(Base):
     total: Mapped[int] = mapped_column(BigInteger)
     promo_code: Mapped[str | None] = mapped_column(String(32))
     payment_id: Mapped[str | None] = mapped_column(String(64))
+    # Номер попытки оплаты — часть ключа идемпотентности. После отказа банка растёт: шлюз с тем же ключом
+    # вернул бы прежний отказ, и оплатить другой картой было бы нельзя
+    payment_attempt: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Когда начался запрос к шлюзу. Пока он идёт, вторая оплата и отмена заказа получают 409
+    payment_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
